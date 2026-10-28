@@ -386,6 +386,70 @@
     let globalTicker = null;
     let currentRingingTaskId = null;
 
+    const notificationWorker = 'serviceWorker' in navigator
+      ? navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).catch(error => {
+          console.error('Notification worker unavailable:', error);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    function handleNotificationAction(taskId, action) {
+      const task = tasks.find(item => item.id === taskId);
+      if (!task) return;
+      if (action === 'complete') {
+        if (!task.isRepeat) tasks = tasks.filter(item => item.id !== taskId);
+        if (currentRingingTaskId === taskId) closeModal();
+        saveTasks();
+        renderTasks();
+      } else if (action === 'snooze') {
+        snoozeTaskDirect(taskId, 5);
+      } else {
+        currentRingingTaskId = taskId;
+        document.getElementById('modal-task-title').innerText = `📢 ${task.title}`;
+        document.getElementById('modal-task-sub').innerText = '提醒时间到！打算完成了还是再推迟一会儿？';
+        document.getElementById('snooze-modal').style.display = 'flex';
+        document.querySelector('#snooze-modal button').focus();
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data?.type !== 'notification-action') return;
+        handleNotificationAction(event.data.taskId, event.data.action);
+      });
+    }
+
+    async function showTaskNotification(task) {
+      if (!window.Notification || Notification.permission !== 'granted') return;
+      const registration = await notificationWorker;
+      if (registration) {
+        try {
+          await registration.showNotification('📢 Bark Reminder 时间到！', {
+            body: task.title,
+            tag: task.id,
+            data: { taskId: task.id, url: window.location.href.split('?')[0] },
+            actions: [
+              { action: 'complete', title: '完成了' },
+              { action: 'snooze', title: '5分钟后提醒' }
+            ]
+          });
+          return;
+        } catch (error) {
+          console.error('Notification actions unavailable:', error);
+        }
+      }
+      try {
+        const notification = new Notification('📢 Bark Reminder 时间到！', { body: task.title });
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+          handleNotificationAction(task.id, 'open');
+        };
+      } catch (error) {
+        console.error('Notification unavailable:', error);
+      }
+    }
+
     // 选择预设时间
     function selectTime(mins, btnElement) {
       selectedMinutes = mins;
@@ -578,21 +642,8 @@
             document.getElementById('modal-task-sub').innerText = `提醒时间到！打算完成了还是再推迟一会儿？`;
             document.getElementById('snooze-modal').style.display = 'flex';
 
-            // 触发系统通知
-            if (window.Notification && Notification.permission === 'granted') {
-              const notification = new Notification('📢 Bark Reminder 时间到！', { body: t.title });
-              notification.onclick = () => {
-                window.focus();
-                notification.close();
-                const task = tasks.find(item => item.id === t.id);
-                if (!task) return;
-                currentRingingTaskId = task.id;
-                document.getElementById('modal-task-title').innerText = `📢 ${task.title}`;
-                document.getElementById('modal-task-sub').innerText = '提醒时间到！打算完成了还是再推迟一会儿？';
-                document.getElementById('snooze-modal').style.display = 'flex';
-                document.querySelector('#snooze-modal button').focus();
-              };
-            }
+            // 通知失败不影响任务计时和网页提醒。
+            void showTaskNotification(t);
 
             if (t.isRepeat) {
               // 重置循环倒计时
@@ -621,6 +672,14 @@
 
     // 初始化运行
     window.onload = function() {
+      const params = new URLSearchParams(location.search);
+      const taskId = params.get('notificationTask');
+      if (taskId) {
+        handleNotificationAction(taskId, params.get('notificationAction') || 'open');
+        params.delete('notificationTask');
+        params.delete('notificationAction');
+        history.replaceState(null, '', location.pathname + (params.size ? '?' + params : '') + location.hash);
+      }
       renderTasks();
       startGlobalTicker();
     };
