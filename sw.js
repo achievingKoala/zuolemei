@@ -22,10 +22,14 @@ self.addEventListener('notificationclick', event => {
     if (page) {
       page.postMessage({ type: 'notification-action', taskId, action });
       if (action === 'open') await page.focus();
-    } else {
+    } else if (action === 'open') {
       target.searchParams.set('notificationTask', taskId);
       target.searchParams.set('notificationAction', action);
       await self.clients.openWindow(target.href);
+    } else {
+      const pending = await caches.open('bark-pending-actions-v1');
+      const key = new URL('./__notification_action__/' + crypto.randomUUID(), self.location.href);
+      await pending.put(key.href, new Response(JSON.stringify({ taskId, action, time: Date.now() })));
     }
   })());
 });

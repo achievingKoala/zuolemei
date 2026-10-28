@@ -393,7 +393,7 @@
         })
       : Promise.resolve(null);
 
-    function handleNotificationAction(taskId, action) {
+    function handleNotificationAction(taskId, action, actionTime = Date.now()) {
       const task = tasks.find(item => item.id === taskId);
       if (!task) return;
       if (action === 'complete') {
@@ -402,7 +402,10 @@
         saveTasks();
         renderTasks();
       } else if (action === 'snooze') {
-        snoozeTaskDirect(taskId, 5);
+        task.targetTime = actionTime + 5 * 60 * 1000;
+        if (currentRingingTaskId === taskId) closeModal();
+        saveTasks();
+        renderTasks();
       } else {
         currentRingingTaskId = taskId;
         document.getElementById('modal-task-title').innerText = `📢 ${task.title}`;
@@ -671,7 +674,24 @@
     }
 
     // 初始化运行
-    window.onload = function() {
+    window.onload = async function() {
+      if ('caches' in window) {
+        try {
+          const pending = await caches.open('bark-pending-actions-v1');
+          const actions = [];
+          for (const key of await pending.keys()) {
+            const response = await pending.match(key);
+            actions.push({ key, ...await response.json() });
+          }
+          actions.sort((a, b) => a.time - b.time);
+          for (const item of actions) {
+            handleNotificationAction(item.taskId, item.action, item.time);
+            await pending.delete(item.key);
+          }
+        } catch (error) {
+          console.error('Pending notification actions unavailable:', error);
+        }
+      }
       const params = new URLSearchParams(location.search);
       const taskId = params.get('notificationTask');
       if (taskId) {
