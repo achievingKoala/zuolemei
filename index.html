@@ -325,6 +325,7 @@
       <div class="form-group">
         <label>多久后提醒？</label>
         <div class="time-options">
+          <button class="btn-time" onclick="selectTime(0.05, this)">3秒（测试）</button>
           <button class="btn-time active" onclick="selectTime(5, this)">5分钟</button>
           <button class="btn-time" onclick="selectTime(15, this)">15分钟</button>
           <button class="btn-time" onclick="selectTime(25, this)">25分钟</button>
@@ -345,12 +346,14 @@
         <div class="sound-badge">
           <div class="sound-info">
             <span>🚨</span>
-            <strong>高穿透脉冲警报 (默认)</strong>
+            <strong>高穿透脉冲警报（最长响铃5分钟）</strong>
           </div>
           <button class="btn-preview" onclick="playSignatureSound()">试听</button>
+          <button class="btn-preview" onclick="stopAlarm()">停止铃声</button>
         </div>
       </div>
 
+      <p id="sound-status" role="status" style="font-size:0.85rem; color:var(--text-dim);">到期后循环播放脉冲警报，最长5分钟；可随时停止。</p>
       <button class="btn-start" onclick="addTask()">添加声音提醒</button>
     </div>
 
@@ -398,30 +401,48 @@
       btnElement.classList.add('active');
     }
 
-    // Web Audio API 高穿透力音效
+    let alarmContext = null;
+    let alarmPulseTimer = null;
+    let alarmStopTimer = null;
+
+    function stopAlarm() {
+      clearInterval(alarmPulseTimer);
+      clearTimeout(alarmStopTimer);
+      alarmPulseTimer = null;
+      alarmStopTimer = null;
+      if (alarmContext) {
+        alarmContext.close().catch(console.error);
+        alarmContext = null;
+      }
+    }
+
     function playSignatureSound() {
+      stopAlarm();
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        [0, 0.2, 0.4].forEach(delay => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
-          osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + delay + 0.15);
-
-          gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.15);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-
-          osc.start(ctx.currentTime + delay);
-          osc.stop(ctx.currentTime + delay + 0.15);
-        });
-      } catch (e) {
-        console.error("Audio playback error:", e);
+        alarmContext = ctx;
+        const playPulse = () => {
+          [0, 0.2, 0.4].forEach(delay => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
+            osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + delay + 0.15);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.15);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + 0.15);
+          });
+        };
+        playPulse();
+        alarmPulseTimer = setInterval(playPulse, 1000);
+        alarmStopTimer = setTimeout(stopAlarm, 5 * 60 * 1000);
+      } catch (error) {
+        stopAlarm();
+        console.error('Alarm playback error:', error);
+        document.getElementById('sound-status').textContent = '声音播放失败，请点击试听并检查浏览器声音权限。';
       }
     }
 
@@ -453,6 +474,7 @@
     function snoozeTaskDirect(id, extraMinutes) {
       const task = tasks.find(t => t.id === id);
       if (task) {
+        if (currentRingingTaskId === id) closeModal();
         task.targetTime = Date.now() + extraMinutes * 60 * 1000;
         saveTasks();
         renderTasks();
@@ -481,12 +503,14 @@
     }
 
     function closeModal() {
+      stopAlarm();
       document.getElementById('snooze-modal').style.display = 'none';
       currentRingingTaskId = null;
     }
 
     // 删除任务
     function deleteTask(id) {
+      if (currentRingingTaskId === id) closeModal();
       tasks = tasks.filter(t => t.id !== id);
       saveTasks();
       renderTasks();
@@ -525,7 +549,7 @@
               <div class="task-info">
                 <span class="task-title">${t.title}</span>
                 <div class="task-meta">
-                  <span>每 ${t.minutes} 分钟</span>
+                  <span>每 ${t.minutes < 1 ? `${Math.round(t.minutes * 60)} 秒` : `${t.minutes} 分钟`}</span>
                   ${t.isRepeat ? '<span class="repeat-badge">循环</span>' : ''}
                 </div>
               </div>
@@ -553,7 +577,7 @@
         let updated = false;
 
         tasks.forEach(t => {
-          if (now >= t.targetTime) {
+          if (now >= t.targetTime && currentRingingTaskId !== t.id) {
             // 触发声音
             playSignatureSound();
 
