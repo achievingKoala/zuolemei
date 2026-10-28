@@ -589,7 +589,18 @@
 
             // 触发系统通知
             if (window.Notification && Notification.permission === 'granted') {
-              new Notification('📢 Bark Reminder 时间到！', { body: t.title });
+              const notification = new Notification('📢 Bark Reminder 时间到！', { body: t.title });
+              notification.onclick = () => {
+                window.focus();
+                notification.close();
+                const task = tasks.find(item => item.id === t.id);
+                if (!task) return;
+                currentRingingTaskId = task.id;
+                document.getElementById('modal-task-title').innerText = `📢 ${task.title}`;
+                document.getElementById('modal-task-sub').innerText = '提醒时间到！打算完成了还是再推迟一会儿？';
+                document.getElementById('snooze-modal').style.display = 'flex';
+                document.querySelector('#snooze-modal button').focus();
+              };
             }
 
             if (t.isRepeat) {
