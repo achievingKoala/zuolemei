@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bark Reminder - 极简声音唤醒工具</title>
+  <title>提醒闹钟 - 极简声音唤醒工具</title>
   <style>
     /* 采用 levelsio 标志性的极客极简黑白高对比度风格 */
     :root {
@@ -311,7 +311,7 @@
 
   <div class="container">
     <header>
-      <h1>📢 Bark Reminder</h1>
+      <h1>📢 提醒闹钟</h1>
       <p class="subtitle">只用声音，强行唤醒你的执行力</p>
     </header>
 
@@ -374,7 +374,7 @@
     </div>
 
     <!-- levelsio 式变现/打赏入口 -->
-    <div class="pro-banner">
+    <div class="pro-banner" style="display: none;">
       <span>想要暴躁老哥语音或 AI 语音定制？</span>
       <a href="#" class="pro-link" onclick="alert('即将推出 Pro 版 ($3/月)！包括 AI 语音喊话、自定义音频上传等功能。'); return false;">解锁 Pro ⚡</a>
     </div>
@@ -427,7 +427,7 @@
       const registration = await notificationWorker;
       if (registration) {
         try {
-          await registration.showNotification('📢 Bark Reminder 时间到！', {
+          await registration.showNotification('📢 提醒闹钟 时间到！', {
             body: task.title,
             tag: task.id,
             data: { taskId: task.id, url: window.location.href.split('?')[0] },
@@ -442,7 +442,7 @@
         }
       }
       try {
-        const notification = new Notification('📢 Bark Reminder 时间到！', { body: task.title });
+        const notification = new Notification('📢 提醒闹钟 时间到！', { body: task.title });
         notification.onclick = () => {
           window.focus();
           notification.close();
@@ -595,7 +595,7 @@
 
       if (tasks.length === 0) {
         listContainer.innerHTML = `<p style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 12px 0;">暂无运行中的提醒，添加一个吧！</p>`;
-        document.title = 'Bark Reminder - 极简声音唤醒工具';
+        document.title = '提醒闹钟 - 极简声音唤醒工具';
         return;
       }
 
@@ -668,7 +668,7 @@
         // 更新网页标题显示最近到期的任务时间
         if (tasks.length > 0) {
           const nearest = Math.min(...tasks.map(t => t.targetTime - now));
-          document.title = `(${formatRemainingTime(nearest)}) Bark Reminder`;
+          document.title = `(${formatRemainingTime(nearest)}) 提醒闹钟`;
         }
       }, 1000);
     }
