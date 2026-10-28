@@ -334,14 +334,6 @@
       </div>
 
       <div class="form-group">
-        <label>循环设置</label>
-        <label class="repeat-option">
-          <input type="checkbox" id="repeat-checkbox">
-          <span>每天 / 到期后自动循环提醒</span>
-        </label>
-      </div>
-
-      <div class="form-group">
         <label>提醒声音</label>
         <div class="sound-badge">
           <div class="sound-info">
@@ -450,13 +442,12 @@
     function addTask() {
       const input = document.getElementById('task-input');
       const title = input.value.trim() || '未命名提醒';
-      const isRepeat = document.getElementById('repeat-checkbox').checked;
 
       const newTask = {
         id: 'task_' + Date.now(),
         title: title,
         minutes: selectedMinutes,
-        isRepeat: isRepeat,
+        isRepeat: false,
         targetTime: Date.now() + selectedMinutes * 60 * 1000
       };
 
