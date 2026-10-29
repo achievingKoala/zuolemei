@@ -357,6 +357,11 @@
       </div>
     </div>
 
+    <section class="active-tasks-section" aria-labelledby="completed-heading">
+      <h2 class="section-title" id="completed-heading">已完成记录 (<span id="completed-count">0</span>)</h2>
+      <div id="completed-list"></div>
+    </section>
+
     <!-- 追问与声音提示弹窗 -->
     <div id="snooze-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; padding:20px;">
       <div style="background:var(--card-bg); border:1px solid var(--accent); border-radius:12px; padding:24px; max-width:400px; width:100%; text-align:center;">
@@ -383,6 +388,7 @@
   <script>
     let selectedMinutes = 5;
     let tasks = JSON.parse(localStorage.getItem('bark_tasks') || '[]');
+    let completedTasks = JSON.parse(localStorage.getItem('bark_completed_tasks') || '[]');
     let globalTicker = null;
     let currentRingingTaskId = null;
 
@@ -397,10 +403,7 @@
       const task = tasks.find(item => item.id === taskId);
       if (!task) return;
       if (action === 'complete') {
-        if (!task.isRepeat) tasks = tasks.filter(item => item.id !== taskId);
-        if (currentRingingTaskId === taskId) closeModal();
-        saveTasks();
-        renderTasks();
+        completeTask(taskId, actionTime);
       } else if (action === 'snooze') {
         task.targetTime = actionTime + 5 * 60 * 1000;
         if (currentRingingTaskId === taskId) closeModal();
@@ -547,17 +550,52 @@
       }
     }
 
-    // 完成/关闭当前弹窗任务
+    // 两个完成入口共用记录逻辑，取消和稍后提醒不记入历史。
+    function completeTask(id, completedAt = Date.now()) {
+      const task = tasks.find(item => item.id === id);
+      if (!task) return;
+      completedTasks.unshift({ title: task.title, completedAt });
+      localStorage.setItem('bark_completed_tasks', JSON.stringify(completedTasks));
+      if (!task.isRepeat) tasks = tasks.filter(item => item.id !== id);
+      if (currentRingingTaskId === id) closeModal();
+      saveTasks();
+      renderTasks();
+      renderCompletedTasks();
+    }
+
     function completeActiveTask() {
-      if (currentRingingTaskId) {
-        const task = tasks.find(t => t.id === currentRingingTaskId);
-        if (task && !task.isRepeat) {
-          tasks = tasks.filter(t => t.id !== currentRingingTaskId);
-        }
-        saveTasks();
-        renderTasks();
-        closeModal();
+      if (currentRingingTaskId) completeTask(currentRingingTaskId);
+    }
+
+    function renderCompletedTasks() {
+      const list = document.getElementById('completed-list');
+      document.getElementById('completed-count').textContent = completedTasks.length;
+      list.replaceChildren();
+      if (!completedTasks.length) {
+        const empty = document.createElement('p');
+        empty.className = 'task-meta';
+        empty.textContent = '暂无已完成记录，完成提醒后会显示在这里。';
+        list.append(empty);
+        return;
       }
+      const formatter = new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      });
+      completedTasks.forEach(task => {
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        const title = document.createElement('div');
+        title.className = 'task-title';
+        title.style.overflowWrap = 'anywhere';
+        title.textContent = task.title;
+        const time = document.createElement('time');
+        time.className = 'task-meta';
+        time.dateTime = new Date(task.completedAt).toISOString();
+        time.textContent = '已完成 · ' + formatter.format(task.completedAt);
+        card.append(title, time);
+        list.append(card);
+      });
     }
 
     function closeModal() {
@@ -701,6 +739,7 @@
         history.replaceState(null, '', location.pathname + (params.size ? '?' + params : '') + location.hash);
       }
       renderTasks();
+      renderCompletedTasks();
       startGlobalTicker();
     };
   </script>
