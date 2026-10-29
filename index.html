@@ -320,6 +320,15 @@
       <div class="form-group">
         <label for="task-input">提醒事项</label>
         <input type="text" id="task-input" placeholder="例如：站起来喝水 / 关电脑" value="站起来活动一下！">
+        <div role="group" aria-label="常用提醒事项" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">喝杯水</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">站起来活动</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">休息眼睛</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">开始学习</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">回到工作</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">放下手机</button>
+          <button type="button" class="btn-snooze" onclick="selectTaskPreset(this)">准备睡觉</button>
+        </div>
       </div>
 
       <div class="form-group">
@@ -520,6 +529,12 @@
         console.error('Alarm playback error:', error);
         document.getElementById('sound-status').textContent = '声音播放失败，请点击试听并检查浏览器声音权限。';
       }
+    }
+
+    function selectTaskPreset(button) {
+      const input = document.getElementById('task-input');
+      input.value = button.textContent.trim();
+      input.focus();
     }
 
     // 添加新任务
