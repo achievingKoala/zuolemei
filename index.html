@@ -362,12 +362,22 @@
       <div id="completed-list"></div>
     </section>
 
+    <section class="active-tasks-section" aria-labelledby="activity-heading">
+      <h2 class="section-title" id="activity-heading">提醒时的记录 (<span id="activity-count">0</span>)</h2>
+      <div id="activity-list"></div>
+    </section>
+
     <!-- 追问与声音提示弹窗 -->
     <div id="snooze-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; padding:20px;">
       <div style="background:var(--card-bg); border:1px solid var(--accent); border-radius:12px; padding:24px; max-width:400px; width:100%; text-align:center;">
         <h2 style="font-size:1.3rem; margin-bottom:8px;" id="modal-task-title">时间到了！</h2>
         <p style="color:var(--text-dim); font-size:0.9rem; margin-bottom:20px;" id="modal-task-sub">完成了吗？或者选择稍后提醒：</p>
         
+        <div class="form-group" style="text-align:left;">
+          <label for="current-activity">你现在正在做什么？</label>
+          <input type="text" id="current-activity" placeholder="例如：刷手机 / 写报告 / 吃饭" maxlength="500">
+          <p style="color:var(--text-dim); font-size:0.8rem; margin-top:8px;">点击完成或稍后提醒时保存，可留空。</p>
+        </div>
         <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:16px;">
           <button class="btn-time" onclick="snoozeActiveTask(5)">+5分钟</button>
           <button class="btn-time" onclick="snoozeActiveTask(10)">+10分钟</button>
@@ -389,6 +399,7 @@
     let selectedMinutes = 5;
     let tasks = JSON.parse(localStorage.getItem('bark_tasks') || '[]');
     let completedTasks = JSON.parse(localStorage.getItem('bark_completed_tasks') || '[]');
+    let activityRecords = JSON.parse(localStorage.getItem('bark_activity_records') || '[]');
     let globalTicker = null;
     let currentRingingTaskId = null;
 
@@ -405,14 +416,17 @@
       if (action === 'complete') {
         completeTask(taskId, actionTime);
       } else if (action === 'snooze') {
+        recordCurrentActivity(task, '稍后提醒（5分钟）', actionTime);
         task.targetTime = actionTime + 5 * 60 * 1000;
         if (currentRingingTaskId === taskId) closeModal();
         saveTasks();
         renderTasks();
       } else {
+        if (currentRingingTaskId && currentRingingTaskId !== taskId) return;
         currentRingingTaskId = taskId;
         document.getElementById('modal-task-title').innerText = `📢 ${task.title}`;
         document.getElementById('modal-task-sub').innerText = '提醒时间到！打算完成了还是再推迟一会儿？';
+        if (document.getElementById('snooze-modal').style.display !== 'flex') document.getElementById('current-activity').value = '';
         document.getElementById('snooze-modal').style.display = 'flex';
         document.querySelector('#snooze-modal button').focus();
       }
@@ -535,7 +549,10 @@
     function snoozeTaskDirect(id, extraMinutes) {
       const task = tasks.find(t => t.id === id);
       if (task) {
-        if (currentRingingTaskId === id) closeModal();
+        if (currentRingingTaskId === id) {
+          recordCurrentActivity(task, `稍后提醒（${extraMinutes}分钟）`);
+          closeModal();
+        }
         task.targetTime = Date.now() + extraMinutes * 60 * 1000;
         saveTasks();
         renderTasks();
@@ -554,7 +571,8 @@
     function completeTask(id, completedAt = Date.now()) {
       const task = tasks.find(item => item.id === id);
       if (!task) return;
-      completedTasks.unshift({ title: task.title, completedAt });
+      const activity = recordCurrentActivity(task, '已完成', completedAt);
+      completedTasks.unshift({ title: task.title, completedAt, activity });
       localStorage.setItem('bark_completed_tasks', JSON.stringify(completedTasks));
       if (!task.isRepeat) tasks = tasks.filter(item => item.id !== id);
       if (currentRingingTaskId === id) closeModal();
@@ -565,6 +583,47 @@
 
     function completeActiveTask() {
       if (currentRingingTaskId) completeTask(currentRingingTaskId);
+    }
+
+    function recordCurrentActivity(task, action, recordedAt = Date.now()) {
+      if (currentRingingTaskId !== task.id) return '';
+      const input = document.getElementById('current-activity');
+      const activity = input.value.trim();
+      if (!activity) return '';
+      activityRecords.unshift({ title: task.title, activity, action, recordedAt });
+      localStorage.setItem('bark_activity_records', JSON.stringify(activityRecords));
+      input.value = '';
+      renderActivityRecords();
+      return activity;
+    }
+
+    function renderActivityRecords() {
+      const list = document.getElementById('activity-list');
+      document.getElementById('activity-count').textContent = activityRecords.length;
+      list.replaceChildren();
+      if (!activityRecords.length) {
+        const empty = document.createElement('p');
+        empty.className = 'task-meta';
+        empty.textContent = '在到期弹窗中填写正在做的事，处理提醒后会保存在这里。';
+        list.append(empty);
+        return;
+      }
+      activityRecords.forEach(record => {
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        card.style.overflowWrap = 'anywhere';
+        const title = document.createElement('div');
+        title.className = 'task-title';
+        title.textContent = record.title;
+        const activity = document.createElement('p');
+        activity.textContent = '当时正在：' + record.activity;
+        const meta = document.createElement('time');
+        meta.className = 'task-meta';
+        meta.dateTime = new Date(record.recordedAt).toISOString();
+        meta.textContent = record.action + ' · ' + new Date(record.recordedAt).toLocaleString('zh-CN', { hour12: false });
+        card.append(title, activity, meta);
+        list.append(card);
+      });
     }
 
     function renderCompletedTasks() {
@@ -594,6 +653,12 @@
         time.dateTime = new Date(task.completedAt).toISOString();
         time.textContent = '已完成 · ' + formatter.format(task.completedAt);
         card.append(title, time);
+        if (task.activity) {
+          const activity = document.createElement('p');
+          activity.style.overflowWrap = 'anywhere';
+          activity.textContent = '当时正在：' + task.activity;
+          card.append(activity);
+        }
         list.append(card);
       });
     }
@@ -602,6 +667,7 @@
       stopAlarm();
       document.getElementById('snooze-modal').style.display = 'none';
       currentRingingTaskId = null;
+      document.getElementById('current-activity').value = '';
     }
 
     // 删除任务
@@ -673,11 +739,12 @@
         let updated = false;
 
         tasks.forEach(t => {
-          if (now >= t.targetTime && currentRingingTaskId !== t.id) {
+          if (now >= t.targetTime && currentRingingTaskId === null) {
             // 触发声音
             playSignatureSound();
 
             // 记录当前响铃任务并弹出追问弹窗
+            document.getElementById('current-activity').value = '';
             currentRingingTaskId = t.id;
             document.getElementById('modal-task-title').innerText = `📢 ${t.title}`;
             document.getElementById('modal-task-sub').innerText = `提醒时间到！打算完成了还是再推迟一会儿？`;
@@ -740,6 +807,7 @@
       }
       renderTasks();
       renderCompletedTasks();
+      renderActivityRecords();
       startGlobalTicker();
     };
   </script>
