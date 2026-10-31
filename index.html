@@ -91,50 +91,6 @@
       border-color: var(--accent);
     }
 
-    .task-presets {
-      display: grid;
-      gap: 14px;
-      margin-top: 16px;
-    }
-
-    .preset-health { --preset-color: #86deb3; --preset-bg: #192e24; --preset-border: #365b47; }
-    .preset-focus { --preset-color: #99c7ff; --preset-bg: #1c293a; --preset-border: #3c5575; }
-    .preset-life { --preset-color: #d1b0f5; --preset-bg: #2b2237; --preset-border: #5c466f; }
-
-    .preset-heading {
-      color: var(--preset-color);
-      font-size: 0.8rem;
-      font-weight: 600;
-      margin-bottom: 7px;
-    }
-
-    .preset-options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .btn-preset {
-      background: var(--preset-bg);
-      color: var(--preset-color);
-      border: 1px solid var(--preset-border);
-      border-radius: 8px;
-      padding: 9px 12px;
-      min-height: 40px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-    }
-
-    .btn-preset:hover {
-      border-color: var(--preset-color);
-    }
-
-    .btn-preset:focus-visible {
-      outline: 2px solid var(--preset-color);
-      outline-offset: 3px;
-    }
-
     .time-options {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -364,32 +320,9 @@
     <div id="setup-form">
       <div class="form-group">
         <label for="task-input">提醒事项</label>
-        <input type="text" id="task-input" placeholder="例如：站起来喝水 / 关电脑" value="站起来活动一下！">
-        <div class="task-presets" aria-label="常用提醒事项">
-          <div class="preset-group preset-health" role="group" aria-labelledby="preset-health-title">
-            <div class="preset-heading" id="preset-health-title">🌿 身体照顾</div>
-            <div class="preset-options">
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">喝杯水</button>
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">站起来活动</button>
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">休息眼睛</button>
-            </div>
-          </div>
-          <div class="preset-group preset-focus" role="group" aria-labelledby="preset-focus-title">
-            <div class="preset-heading" id="preset-focus-title">🎯 专注学习</div>
-            <div class="preset-options">
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">开始学习</button>
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">回到工作</button>
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">放下手机</button>
-            </div>
-          </div>
-          <div class="preset-group preset-life" role="group" aria-labelledby="preset-life-title">
-            <div class="preset-heading" id="preset-life-title">🌙 生活作息</div>
-            <div class="preset-options">
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">按时吃饭</button>
-              <button type="button" class="btn-preset" onclick="selectTaskPreset(this)">准备睡觉</button>
-            </div>
-          </div>
-        </div>
+        <input type="text" id="task-input" list="completed-task-options" autocomplete="off" placeholder="输入新事项，或选择已做过的事项">
+        <datalist id="completed-task-options"></datalist>
+
       </div>
 
       <div class="form-group">
@@ -601,12 +534,6 @@
       }
     }
 
-    function selectTaskPreset(button) {
-      const input = document.getElementById('task-input');
-      input.value = button.textContent.trim();
-      input.focus();
-    }
-
     // 添加新任务
     function addTask() {
       const input = document.getElementById('task-input');
@@ -714,7 +641,22 @@
       });
     }
 
+    function renderCompletedTaskOptions() {
+      const options = document.getElementById('completed-task-options');
+      const titles = [...new Set(completedTasks.map(task =>
+        typeof task.title === 'string' ? task.title.trim() : ''
+      ).filter(Boolean))];
+      options.replaceChildren();
+      titles.forEach(title => {
+        const option = document.createElement('option');
+        option.value = title;
+        option.textContent = title;
+        options.append(option);
+      });
+    }
+
     function renderCompletedTasks() {
+      renderCompletedTaskOptions();
       const list = document.getElementById('completed-list');
       document.getElementById('completed-count').textContent = completedTasks.length;
       list.replaceChildren();
