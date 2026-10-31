@@ -480,14 +480,21 @@
         })
       : Promise.resolve(null);
 
+    function recordSnooze(task, minutes) {
+      task.snoozeCount = (Number(task.snoozeCount) || 0) + 1;
+      task.snoozeMinutes = (Number(task.snoozeMinutes) || 0) + minutes;
+    }
+
     function handleNotificationAction(taskId, action, actionTime = Date.now()) {
       const task = tasks.find(item => item.id === taskId);
       if (!task) return;
       if (action === 'complete') {
         completeTask(taskId, actionTime);
-      } else if (action === 'snooze') {
-        recordCurrentActivity(task, '稍后提醒（5分钟）', actionTime);
-        task.targetTime = actionTime + 5 * 60 * 1000;
+      } else if (action === 'snooze' || action === 'snooze10') {
+        const minutes = action === 'snooze10' ? 10 : 5;
+        recordSnooze(task, minutes);
+        recordCurrentActivity(task, `稍后提醒（${minutes}分钟）`, actionTime);
+        task.targetTime = actionTime + minutes * 60 * 1000;
         if (currentRingingTaskId === taskId) closeModal();
         saveTasks();
         renderTasks();
@@ -511,15 +518,17 @@
 
     async function showTaskNotification(task) {
       if (!window.Notification || Notification.permission !== 'granted') return;
+      const body = `${task.title}\n已延长 ${Number(task.snoozeCount) || 0} 次，累计 ${Number(task.snoozeMinutes) || 0} 分钟`;
       const registration = await notificationWorker;
       if (registration) {
         try {
           await registration.showNotification('📢 提醒闹钟 时间到！', {
-            body: task.title,
+            body,
             tag: task.id,
             data: { taskId: task.id, url: window.location.href.split('?')[0] },
             actions: [
               { action: 'complete', title: '完成了' },
+              { action: 'snooze10', title: '10分钟后提醒' },
               { action: 'snooze', title: '5分钟后提醒' }
             ]
           });
@@ -529,7 +538,7 @@
         }
       }
       try {
-        const notification = new Notification('📢 提醒闹钟 时间到！', { body: task.title });
+        const notification = new Notification('📢 提醒闹钟 时间到！', { body });
         notification.onclick = () => {
           window.focus();
           notification.close();
@@ -608,6 +617,8 @@
         title: title,
         minutes: selectedMinutes,
         isRepeat: false,
+        snoozeCount: 0,
+        snoozeMinutes: 0,
         targetTime: Date.now() + selectedMinutes * 60 * 1000
       };
 
@@ -625,6 +636,7 @@
     function snoozeTaskDirect(id, extraMinutes) {
       const task = tasks.find(t => t.id === id);
       if (task) {
+        recordSnooze(task, extraMinutes);
         if (currentRingingTaskId === id) {
           recordCurrentActivity(task, `稍后提醒（${extraMinutes}分钟）`);
           closeModal();

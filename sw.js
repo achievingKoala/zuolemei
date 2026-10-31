@@ -10,7 +10,7 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   const { taskId, url } = event.notification.data || {};
   if (!taskId || !url) return;
-  const action = ['complete', 'snooze'].includes(event.action) ? event.action : 'open';
+  const action = ['complete', 'snooze', 'snooze10'].includes(event.action) ? event.action : 'open';
   event.waitUntil((async () => {
     const target = new URL(url);
     if (target.origin !== self.location.origin) return;
