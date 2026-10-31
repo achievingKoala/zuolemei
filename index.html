@@ -194,6 +194,21 @@
       margin-bottom: 12px;
     }
 
+    .completed-date-nav {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .completed-date-nav input {
+      width: auto;
+      min-width: 0;
+      flex: 1;
+      color-scheme: dark;
+    }
+
     .task-card {
       background: #000;
       border: 1px solid var(--border);
@@ -362,6 +377,12 @@
 
     <section class="active-tasks-section" aria-labelledby="completed-heading">
       <h2 class="section-title" id="completed-heading">已完成记录 (<span id="completed-count">0</span>)</h2>
+      <div class="completed-date-nav">
+        <button type="button" class="btn-snooze" onclick="changeCompletedDate(-1)" aria-label="查看前一天">前一天</button>
+        <input type="date" id="completed-date" aria-label="查看哪一天的已完成记录" onchange="renderCompletedTasks()">
+        <button type="button" class="btn-snooze" onclick="changeCompletedDate(1)" aria-label="查看后一天">后一天</button>
+        <button type="button" class="btn-snooze" onclick="showCompletedToday()">今天</button>
+      </div>
       <div id="completed-list"></div>
     </section>
 
@@ -655,15 +676,38 @@
       });
     }
 
+    function localDateKey(value) {
+      const date = new Date(value);
+      return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')].join('-');
+    }
+
+    function changeCompletedDate(offset) {
+      const input = document.getElementById('completed-date');
+      const date = new Date((input.value || localDateKey(Date.now())) + 'T12:00:00');
+      date.setDate(date.getDate() + offset);
+      input.value = localDateKey(date);
+      renderCompletedTasks();
+    }
+
+    function showCompletedToday() {
+      document.getElementById('completed-date').value = localDateKey(Date.now());
+      renderCompletedTasks();
+    }
+
     function renderCompletedTasks() {
       renderCompletedTaskOptions();
       const list = document.getElementById('completed-list');
-      document.getElementById('completed-count').textContent = completedTasks.length;
+      const dateInput = document.getElementById('completed-date');
+      if (!dateInput.value) dateInput.value = localDateKey(Date.now());
+      const dailyTasks = completedTasks.filter(task => localDateKey(task.completedAt) === dateInput.value)
+        .sort((a, b) => b.completedAt - a.completedAt);
+      document.getElementById('completed-count').textContent = dailyTasks.length;
       list.replaceChildren();
-      if (!completedTasks.length) {
+      if (!dailyTasks.length) {
         const empty = document.createElement('p');
         empty.className = 'task-meta';
-        empty.textContent = '暂无已完成记录，完成提醒后会显示在这里。';
+        empty.textContent = '这一天还没有已完成记录。';
         list.append(empty);
         return;
       }
@@ -671,7 +715,7 @@
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
       });
-      completedTasks.forEach(task => {
+      dailyTasks.forEach(task => {
         const card = document.createElement('div');
         card.className = 'task-card';
         const title = document.createElement('div');
