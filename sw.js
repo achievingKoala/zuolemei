@@ -8,7 +8,7 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const { taskId, url } = event.notification.data || {};
+  const { taskId, url, token } = event.notification.data || {};
   if (!taskId || !url) return;
   const action = ['complete', 'snooze', 'snooze10'].includes(event.action) ? event.action : 'open';
   event.waitUntil((async () => {
@@ -20,16 +20,17 @@ self.addEventListener('notificationclick', event => {
       return candidate.origin === target.origin && candidate.pathname === target.pathname;
     });
     if (page) {
-      page.postMessage({ type: 'notification-action', taskId, action });
+      page.postMessage({ type: 'notification-action', taskId, action, token, time: Date.now() });
       if (action === 'open') await page.focus();
     } else if (action === 'open') {
       target.searchParams.set('notificationTask', taskId);
+      target.searchParams.set('notificationToken', token || '');
       target.searchParams.set('notificationAction', action);
       await self.clients.openWindow(target.href);
     } else {
       const pending = await caches.open('bark-pending-actions-v1');
       const key = new URL('./__notification_action__/' + crypto.randomUUID(), self.location.href);
-      await pending.put(key.href, new Response(JSON.stringify({ taskId, action, time: Date.now() })));
+      await pending.put(key.href, new Response(JSON.stringify({ taskId, action, token, time: Date.now() })));
     }
   })());
 });

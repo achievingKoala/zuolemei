@@ -435,18 +435,35 @@
         })
       : Promise.resolve(null);
 
+    const fallbackNotifications = new Map();
+
+    async function clearTaskNotification(id) {
+      fallbackNotifications.get(id)?.close();
+      fallbackNotifications.delete(id);
+      const registration = await notificationWorker;
+      if (registration) {
+        for (const notification of await registration.getNotifications({ tag: id })) notification.close();
+      }
+    }
+
+    function resolveRinging(task) {
+      delete task.ringingToken;
+      void clearTaskNotification(task.id).catch(console.error);
+    }
+
     function recordSnooze(task, minutes) {
       task.snoozeCount = (Number(task.snoozeCount) || 0) + 1;
       task.snoozeMinutes = (Number(task.snoozeMinutes) || 0) + minutes;
     }
 
-    function handleNotificationAction(taskId, action, actionTime = Date.now()) {
+    function handleNotificationAction(taskId, action, actionTime = Date.now(), token) {
       const task = tasks.find(item => item.id === taskId);
-      if (!task) return;
+      if (!task || !token || task.ringingToken !== token) return;
       if (action === 'complete') {
         completeTask(taskId, actionTime);
       } else if (action === 'snooze' || action === 'snooze10') {
         const minutes = action === 'snooze10' ? 10 : 5;
+        resolveRinging(task);
         recordSnooze(task, minutes);
         recordCurrentActivity(task, `稍后提醒（${minutes}分钟）`, actionTime);
         task.targetTime = actionTime + minutes * 60 * 1000;
@@ -467,26 +484,29 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', event => {
         if (event.data?.type !== 'notification-action') return;
-        handleNotificationAction(event.data.taskId, event.data.action);
+        handleNotificationAction(event.data.taskId, event.data.action, event.data.time, event.data.token);
       });
     }
 
     async function showTaskNotification(task) {
       if (!window.Notification || Notification.permission !== 'granted') return;
+      const token = task.ringingToken;
       const body = `${task.title}\n已延长 ${Number(task.snoozeCount) || 0} 次，累计 ${Number(task.snoozeMinutes) || 0} 分钟`;
       const registration = await notificationWorker;
+      if (!JSON.parse(localStorage.getItem('bark_tasks') || '[]').some(t => t.id === task.id && t.ringingToken === token)) return;
       if (registration) {
         try {
           await registration.showNotification('📢 提醒闹钟 时间到！', {
             body,
             tag: task.id,
-            data: { taskId: task.id, url: window.location.href.split('?')[0] },
+            data: { taskId: task.id, token, url: window.location.href.split('?')[0] },
             actions: [
               { action: 'complete', title: '完成了' },
               { action: 'snooze10', title: '10分钟后提醒' },
               { action: 'snooze', title: '5分钟后提醒' }
             ]
           });
+          if (!JSON.parse(localStorage.getItem('bark_tasks') || '[]').some(t => t.id === task.id && t.ringingToken === token)) await clearTaskNotification(task.id);
           return;
         } catch (error) {
           console.error('Notification actions unavailable:', error);
@@ -494,10 +514,11 @@
       }
       try {
         const notification = new Notification('📢 提醒闹钟 时间到！', { body });
+        fallbackNotifications.set(task.id, notification);
         notification.onclick = () => {
           window.focus();
           notification.close();
-          handleNotificationAction(task.id, 'open');
+          handleNotificationAction(task.id, 'open', Date.now(), token);
         };
       } catch (error) {
         console.error('Notification unavailable:', error);
@@ -585,6 +606,7 @@
     function snoozeTaskDirect(id, extraMinutes) {
       const task = tasks.find(t => t.id === id);
       if (task) {
+        resolveRinging(task);
         recordSnooze(task, extraMinutes);
         if (currentRingingTaskId === id) {
           recordCurrentActivity(task, `稍后提醒（${extraMinutes}分钟）`);
@@ -608,6 +630,7 @@
     function completeTask(id, completedAt = Date.now()) {
       const task = tasks.find(item => item.id === id);
       if (!task) return;
+      resolveRinging(task);
       const activity = recordCurrentActivity(task, '已完成', completedAt);
       completedTasks.unshift({ title: task.title, completedAt, activity });
       localStorage.setItem('bark_completed_tasks', JSON.stringify(completedTasks));
@@ -747,6 +770,7 @@
 
     // 删除任务
     function deleteTask(id) {
+      void clearTaskNotification(id).catch(console.error);
       if (currentRingingTaskId === id) closeModal();
       tasks = tasks.filter(t => t.id !== id);
       saveTasks();
@@ -810,12 +834,14 @@
     function startGlobalTicker() {
       if (globalTicker) clearInterval(globalTicker);
 
-      globalTicker = setInterval(() => {
-        const now = Date.now();
+      const tick = () => {
+          const now = Date.now();
         let updated = false;
 
         tasks.forEach(t => {
-          if (now >= t.targetTime && currentRingingTaskId === null) {
+          if (now >= t.targetTime && !t.ringingToken && currentRingingTaskId === null) {
+            t.ringingToken = crypto.randomUUID();
+            saveTasks();
             // 触发声音
             playSignatureSound();
 
@@ -851,7 +877,8 @@
           const nearest = Math.min(...tasks.map(t => t.targetTime - now));
           document.title = `(${formatRemainingTime(nearest)}) 提醒闹钟`;
         }
-      }, 1000);
+      };
+      globalTicker = setInterval(tick, 1000);
     }
 
     // 初始化运行
@@ -866,7 +893,7 @@
           }
           actions.sort((a, b) => a.time - b.time);
           for (const item of actions) {
-            handleNotificationAction(item.taskId, item.action, item.time);
+            handleNotificationAction(item.taskId, item.action, item.time, item.token);
             await pending.delete(item.key);
           }
         } catch (error) {
@@ -876,7 +903,8 @@
       const params = new URLSearchParams(location.search);
       const taskId = params.get('notificationTask');
       if (taskId) {
-        handleNotificationAction(taskId, params.get('notificationAction') || 'open');
+        handleNotificationAction(taskId, params.get('notificationAction') || 'open', Date.now(), params.get('notificationToken'));
+        params.delete('notificationToken');
         params.delete('notificationTask');
         params.delete('notificationAction');
         history.replaceState(null, '', location.pathname + (params.size ? '?' + params : '') + location.hash);
