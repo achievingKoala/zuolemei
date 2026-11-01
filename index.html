@@ -231,6 +231,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .btn-snooze {
@@ -798,6 +799,7 @@
               <span style="font-size: 0.75rem; color: var(--text-dim); margin-right: auto;">稍后提醒:</span>
               <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 5)">+5分</button>
               <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 15)">+15分</button>
+              <button type="button" class="btn-snooze" onclick="completeTask('${t.id}')" style="color:#2ed573; border-color:#2ed573;">已完成</button>
             </div>
           </div>
         `;
