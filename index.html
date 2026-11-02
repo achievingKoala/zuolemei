@@ -332,6 +332,20 @@
       <p class="subtitle">只用声音，强行唤醒你的执行力</p>
     </header>
 
+    <dialog id="edit-reminder-dialog" style="background:var(--bg-color, #181818);color:inherit;border:1px solid #555;border-radius:16px;padding:24px;position:fixed;inset:0;margin:auto;width:380px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto;">
+      <form onsubmit="saveReminderTime(event)">
+        <h2 id="edit-reminder-title" style="font-size:1.1rem;">修改提醒时间</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin:16px 0;">
+          <button type="button" class="btn-snooze" onclick="remindAfterMinutes(15)">15分钟后提醒</button>
+          <button type="button" class="btn-snooze" onclick="remindAfterMinutes(5)">5分钟后提醒</button>
+        </div>
+        <label for="edit-reminder-time">提醒日期和时间</label>
+        <input id="edit-reminder-time" type="datetime-local" required style="display:block;margin:16px 0;color-scheme:dark;">
+        <p id="edit-reminder-error" role="alert" style="color:#ff6b6b;"></p>
+        <button type="button" class="btn-snooze" onclick="document.getElementById('edit-reminder-dialog').close()">取消</button>
+        <button type="submit" class="btn-snooze">保存时间</button>
+      </form>
+    </dialog>
     <!-- 设置表单 -->
     <div id="setup-form">
       <div class="form-group">
@@ -603,8 +617,49 @@
       }
     }
 
+    let editingReminderId = null;
+    function editReminderTime(id) {
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+      editingReminderId = id;
+      const date = new Date(task.targetTime);
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      document.getElementById('edit-reminder-time').value = local.toISOString().slice(0, 16);
+      document.getElementById('edit-reminder-error').textContent = '';
+      document.getElementById('edit-reminder-title').textContent = '修改提醒时间：' + task.title;
+      document.getElementById('edit-reminder-dialog').showModal();
+    }
+    function remindAfterMinutes(minutes) {
+      const task = tasks.find(t => t.id === editingReminderId);
+      if (task) {
+        resolveRinging(task);
+        if (currentRingingTaskId === task.id) closeModal();
+        task.targetTime = Date.now() + minutes * 60 * 1000;
+        saveTasks();
+        renderTasks();
+      }
+      document.getElementById('edit-reminder-dialog').close();
+    }
+    function saveReminderTime(event) {
+      event.preventDefault();
+      const targetTime = new Date(document.getElementById('edit-reminder-time').value).getTime();
+      if (!Number.isFinite(targetTime) || targetTime <= Date.now()) {
+        document.getElementById('edit-reminder-error').textContent = '请选择晚于现在的提醒时间。';
+        return;
+      }
+      const task = tasks.find(t => t.id === editingReminderId);
+      if (task) {
+        resolveRinging(task);
+        if (currentRingingTaskId === task.id) closeModal();
+        task.targetTime = targetTime;
+        saveTasks();
+        renderTasks();
+      }
+      document.getElementById('edit-reminder-dialog').close();
+    }
+
     // 快捷稍后提醒 (从卡片直接推迟)
-    function snoozeTaskDirect(id, extraMinutes) {
+    function snoozeTaskDirect(id, extraMinutes, fromScheduledTime = false) {
       const task = tasks.find(t => t.id === id);
       if (task) {
         resolveRinging(task);
@@ -613,7 +668,7 @@
           recordCurrentActivity(task, `稍后提醒（${extraMinutes}分钟）`);
           closeModal();
         }
-        task.targetTime = Date.now() + extraMinutes * 60 * 1000;
+        task.targetTime = (fromScheduledTime ? task.targetTime : Date.now()) + extraMinutes * 60 * 1000;
         saveTasks();
         renderTasks();
       }
@@ -811,7 +866,8 @@
               <div class="task-info">
                 <span class="task-title">${t.title}</span>
                 <div class="task-meta">
-                  <span>每 ${t.minutes < 1 ? `${Math.round(t.minutes * 60)} 秒` : `${t.minutes} 分钟`}</span>
+                  <span>提醒：${new Date(t.targetTime).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                  ${t.isRepeat ? `<span>每 ${t.minutes < 1 ? `${Math.round(t.minutes * 60)} 秒` : `${t.minutes} 分钟`}提醒一次</span>` : ''}
                   ${t.isRepeat ? '<span class="repeat-badge">循环</span>' : ''}
                 </div>
               </div>
@@ -822,8 +878,9 @@
             </div>
             <div class="task-actions" style="border-top: 1px solid #222; padding-top: 8px; justify-content: flex-end;">
               <span style="font-size: 0.75rem; color: var(--text-dim); margin-right: auto;">稍后提醒:</span>
-              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 5)">+5分</button>
-              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 15)">+15分</button>
+              <button type="button" class="btn-snooze" onclick="editReminderTime('${t.id}')">修改时间</button>
+              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 5, true)">+5分</button>
+              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 15, true)">+15分</button>
               <button type="button" class="btn-snooze" onclick="completeTask('${t.id}')" style="color:#2ed573; border-color:#2ed573;">已完成</button>
             </div>
           </div>
