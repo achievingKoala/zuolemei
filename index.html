@@ -322,6 +322,37 @@
     .pro-link:hover {
       text-decoration: underline;
     }
+    .btn-housework {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 12px;
+      padding: 13px 16px;
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      background: rgba(255, 71, 87, .08);
+      color: var(--accent-hover);
+      font: inherit;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-housework:hover { background: rgba(255, 71, 87, .16); border-color: var(--accent-hover); }
+    .btn-housework:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 3px; }
+    .housework-badge {
+      display: inline-block;
+      margin-right: 8px;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(59,130,246,.15);
+      color: #93c5fd;
+      font-size: .72rem;
+      font-weight: 500;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -345,6 +376,21 @@
         <button type="button" class="btn-snooze" onclick="document.getElementById('edit-reminder-dialog').close()">取消</button>
         <button type="submit" class="btn-snooze">保存时间</button>
       </form>
+    </dialog>
+    <dialog id="housework-dialog" aria-labelledby="housework-heading" style="background:var(--bg-color, #181818);color:inherit;border:1px solid #555;border-radius:16px;padding:24px;position:fixed;inset:0;margin:auto;width:380px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <h2 id="housework-heading" style="font-size:1.1rem;">批量添加家务</h2>
+        <button type="button" class="btn-delete" aria-label="关闭" onclick="document.getElementById('housework-dialog').close()">×</button>
+      </div>
+      <div style="padding-top:8px;">
+      <div style="display:grid;gap:14px;margin:16px 0;">
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="洗碗" data-time="dish-time">洗碗 <input id="dish-time" type="time" value="19:30" aria-label="洗碗提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="洗衣服" data-time="laundry-time">洗衣服 <input id="laundry-time" type="time" value="20:00" aria-label="洗衣服提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="倒垃圾" data-time="trash-time">倒垃圾 <input id="trash-time" type="time" value="20:30" aria-label="倒垃圾提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+      </div>
+      <button type="button" class="btn-start" onclick="addHousework()">添加选中的家务提醒</button>
+      <p id="housework-status" role="status" style="color:var(--text-dim);font-size:.85rem;margin-top:12px;"></p>
+      </div>
     </dialog>
     <!-- 设置表单 -->
     <div id="setup-form">
@@ -381,6 +427,7 @@
 
       <p id="sound-status" role="status" style="font-size:0.85rem; color:var(--text-dim);">到期后循环播放脉冲警报，最长5分钟；可随时停止。</p>
       <button class="btn-start" onclick="addTask()">添加声音提醒</button>
+      <button type="button" class="btn-housework" onclick="document.getElementById('housework-status').textContent = ''; document.getElementById('housework-dialog').showModal();">批量添加家务</button>
     </div>
 
     <!-- 运行中的多任务列表 UI -->
@@ -590,6 +637,35 @@
         console.error('Alarm playback error:', error);
         document.getElementById('sound-status').textContent = '声音播放失败，请点击试听并检查浏览器声音权限。';
       }
+    }
+
+    function addHousework() {
+      const selected = [...document.querySelectorAll('[name="housework"]:checked')];
+      const status = document.getElementById('housework-status');
+      if (!selected.length) { status.textContent = '请先勾选要添加的家务。'; return; }
+      const now = Date.now();
+      const pending = [];
+      for (const item of selected) {
+        const value = document.getElementById(item.dataset.time).value;
+        if (!/^\d{2}:\d{2}$/.test(value)) { status.textContent = '请设置' + item.value + '的提醒时间。'; return; }
+        const [hours, minutes] = value.split(':').map(Number);
+        const date = new Date(now);
+        date.setHours(hours, minutes, 0, 0);
+        if (date.getTime() <= now) { status.textContent = item.value + '的时间已过，请选择晚于现在的时间。'; return; }
+        pending.push({item, targetTime: date.getTime()});
+      }
+      let added = 0;
+      for (const {item, targetTime} of pending) {
+        if (tasks.some(t => t.title === item.value && new Date(t.targetTime).toDateString() === new Date(now).toDateString())) continue;
+        tasks.push({id: 'task_' + crypto.randomUUID(), title: item.value, category: 'housework', minutes: (targetTime - now) / 60000, isRepeat: false, snoozeCount: 0, snoozeMinutes: 0, targetTime});
+        added++;
+      }
+      saveTasks();
+      renderTasks();
+      selected.forEach(item => item.checked = false);
+      document.getElementById('housework-dialog').close();
+      status.textContent = `已添加 ${added} 项家务提醒。` + (added < pending.length ? '已有的家务提醒已跳过。' : '');
+      if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
     }
 
     // 添加新任务
@@ -860,11 +936,12 @@
 
       listContainer.innerHTML = tasks.map(t => {
         const remaining = t.targetTime - Date.now();
+        const isHousework = t.category === 'housework' || ['洗碗', '洗衣服', '倒垃圾'].includes(t.title);
         return `
           <div class="task-card">
             <div class="task-top-row">
               <div class="task-info">
-                <span class="task-title">${t.title}</span>
+                <span class="task-title">${isHousework ? '<span class="housework-badge">家务</span>' : ''}${t.title}</span>
                 <div class="task-meta">
                   <span>提醒：${new Date(t.targetTime).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
                   ${t.isRepeat ? `<span>每 ${t.minutes < 1 ? `${Math.round(t.minutes * 60)} 秒` : `${t.minutes} 分钟`}提醒一次</span>` : ''}
