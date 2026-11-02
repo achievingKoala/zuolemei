@@ -353,6 +353,27 @@
       font-weight: 500;
       vertical-align: middle;
     }
+    .task-actions.reminder-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+      grid-template-rows: auto auto;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid #222;
+      padding-top: 8px;
+    }
+    .reminder-actions-label { grid-column: 1; grid-row: 1; font-size: .75rem; color: var(--text-dim); }
+    .reminder-edit { grid-column: 2; grid-row: 1; }
+    .reminder-plus5 { grid-column: 3; grid-row: 1; }
+    .reminder-plus15 { grid-column: 4; grid-row: 1; }
+    .reminder-complete { grid-column: 5; grid-row: 1; }
+    .reminder-minus5 { grid-column: 3; grid-row: 2; }
+    .reminder-minus15 { grid-column: 4; grid-row: 2; }
+    @media (max-width: 480px) {
+      .task-actions.reminder-actions { grid-template-columns: 0 repeat(4, minmax(0, 1fr)); gap: 6px; }
+      .reminder-actions-label { display: none; }
+      .task-actions.reminder-actions .btn-snooze { padding: 8px 3px; font-size: .75rem; white-space: nowrap; }
+    }
   </style>
 </head>
 <body>
@@ -734,6 +755,16 @@
       document.getElementById('edit-reminder-dialog').close();
     }
 
+    function advanceTaskTime(id, minutes) {
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+      resolveRinging(task);
+      if (currentRingingTaskId === id) closeModal();
+      task.targetTime -= minutes * 60 * 1000;
+      saveTasks();
+      renderTasks();
+    }
+
     // 快捷稍后提醒 (从卡片直接推迟)
     function snoozeTaskDirect(id, extraMinutes, fromScheduledTime = false) {
       const task = tasks.find(t => t.id === id);
@@ -953,12 +984,14 @@
                 <button class="btn-delete" onclick="deleteTask('${t.id}')" title="取消提醒">✕</button>
               </div>
             </div>
-            <div class="task-actions" style="border-top: 1px solid #222; padding-top: 8px; justify-content: flex-end;">
-              <span style="font-size: 0.75rem; color: var(--text-dim); margin-right: auto;">稍后提醒:</span>
-              <button type="button" class="btn-snooze" onclick="editReminderTime('${t.id}')">修改时间</button>
-              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 5, true)">+5分</button>
-              <button class="btn-snooze" onclick="snoozeTaskDirect('${t.id}', 15, true)">+15分</button>
-              <button type="button" class="btn-snooze" onclick="completeTask('${t.id}')" style="color:#2ed573; border-color:#2ed573;">已完成</button>
+            <div class="task-actions reminder-actions">
+              <span class="reminder-actions-label">调整提醒:</span>
+              <button type="button" class="btn-snooze reminder-edit" onclick="editReminderTime('${t.id}')">修改时间</button>
+              <button type="button" class="btn-snooze reminder-plus5" onclick="snoozeTaskDirect('${t.id}', 5, true)">+5分</button>
+              <button type="button" class="btn-snooze reminder-plus15" onclick="snoozeTaskDirect('${t.id}', 15, true)">+15分</button>
+              <button type="button" class="btn-snooze reminder-complete" onclick="completeTask('${t.id}')" style="color:#2ed573; border-color:#2ed573;">已完成</button>
+              <button type="button" class="btn-snooze reminder-minus5" onclick="advanceTaskTime('${t.id}', 5)">−5分</button>
+              <button type="button" class="btn-snooze reminder-minus15" onclick="advanceTaskTime('${t.id}', 15)">−15分</button>
             </div>
           </div>
         `;
