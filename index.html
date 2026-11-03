@@ -374,6 +374,12 @@
       .reminder-actions-label { display: none; }
       .task-actions.reminder-actions .btn-snooze { padding: 8px 3px; font-size: .75rem; white-space: nowrap; }
     }
+    .btn-housework-blue { color:#93c5fd; border-color:#3b82f6; background:rgba(59,130,246,.09); }
+    .btn-housework-blue:hover { background:rgba(59,130,246,.18); border-color:#60a5fa; }
+    .btn-housework-blue:focus-visible { outline-color:#60a5fa; }
+    .btn-sleep-purple { color:#c4b5fd; border-color:#a78bfa; background:rgba(167,139,250,.09); }
+    .btn-sleep-purple:hover { background:rgba(167,139,250,.18); border-color:#c4b5fd; }
+    .btn-sleep-purple:focus-visible { outline-color:#c4b5fd; }
   </style>
 </head>
 <body>
@@ -405,14 +411,25 @@
       </div>
       <div style="padding-top:8px;">
       <div style="display:grid;gap:14px;margin:16px 0;">
-        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="洗碗" data-time="dish-time">洗碗 <input id="dish-time" type="time" value="19:30" aria-label="洗碗提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
-        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="洗衣服" data-time="laundry-time">洗衣服 <input id="laundry-time" type="time" value="20:00" aria-label="洗衣服提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
-        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" name="housework" value="倒垃圾" data-time="trash-time">倒垃圾 <input id="trash-time" type="time" value="20:30" aria-label="倒垃圾提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" checked name="housework" value="洗碗" data-time="dish-time">洗碗 <input id="dish-time" type="time" value="19:30" aria-label="洗碗提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" checked name="housework" value="洗衣服" data-time="laundry-time">洗衣服 <input id="laundry-time" type="time" value="20:00" aria-label="洗衣服提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
+        <label style="display:flex;align-items:center;gap:12px;"><input type="checkbox" checked name="housework" value="倒垃圾" data-time="trash-time">倒垃圾 <input id="trash-time" type="time" value="20:30" aria-label="倒垃圾提醒时间" style="margin-left:auto;color-scheme:dark;"></label>
       </div>
       <button type="button" class="btn-start" onclick="addHousework()">添加选中的家务提醒</button>
       <p id="housework-status" role="status" style="color:var(--text-dim);font-size:.85rem;margin-top:12px;"></p>
       </div>
     </dialog>
+    <dialog id="sleep-dialog" aria-labelledby="sleep-heading" style="background:var(--bg);color:var(--text);border:1px solid #555;border-radius:16px;padding:24px;position:fixed;inset:0;margin:auto;width:380px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
+        <h2 id="sleep-heading" style="font-size:1.1rem;">早睡清单</h2>
+        <button type="button" class="btn-delete" aria-label="关闭" onclick="document.getElementById('sleep-dialog').close()">×</button>
+      </div>
+      <label for="sleep-target" style="display:flex;align-items:center;justify-content:space-between;margin:20px 0;">目标睡眠时间 <input id="sleep-target" type="time" value="23:00" onchange="renderSleepPlan()" style="color-scheme:dark;"></label>
+      <div id="sleep-plan" style="display:grid;gap:16px;"></div>
+      <p id="sleep-status" role="status" style="font-size:.85rem;color:var(--text-dim);margin-top:16px;"></p>
+      <button type="button" class="btn-start" onclick="addSleepPlan()">添加选中的早睡提醒</button>
+    </dialog>
+
     <!-- 设置表单 -->
     <div id="setup-form">
       <div class="form-group">
@@ -448,7 +465,10 @@
 
       <p id="sound-status" role="status" style="font-size:0.85rem; color:var(--text-dim);">到期后循环播放脉冲警报，最长5分钟；可随时停止。</p>
       <button class="btn-start" onclick="addTask()">添加声音提醒</button>
-      <button type="button" class="btn-housework" onclick="document.getElementById('housework-status').textContent = ''; document.getElementById('housework-dialog').showModal();">批量添加家务</button>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      <button type="button" class="btn-housework btn-housework-blue" onclick="document.getElementById('housework-status').textContent = ''; document.querySelectorAll('[name=housework]').forEach(item => item.checked = true); document.getElementById('housework-dialog').showModal();">批量添加家务</button>
+      <button type="button" class="btn-housework btn-sleep-purple" onclick="openSleepPlan()">添加早睡清单</button>
+      </div>
     </div>
 
     <!-- 运行中的多任务列表 UI -->
@@ -658,6 +678,59 @@
         console.error('Alarm playback error:', error);
         document.getElementById('sound-status').textContent = '声音播放失败，请点击试听并检查浏览器声音权限。';
       }
+    }
+
+    const sleepSteps = [
+      {title: '记录明天要做的事', offset: 45},
+      {title: '洗漱刷牙', offset: 30},
+      {title: '收拾床', offset: 10},
+      {title: '关灯睡觉', offset: 0}
+    ];
+    let sleepSelection = [true, true, true, true];
+    function getSleepPlan() {
+      const value = document.getElementById('sleep-target').value;
+      if (!/^\d{2}:\d{2}$/.test(value)) return [];
+      const [hour, minute] = value.split(':').map(Number);
+      const target = new Date();
+      target.setHours(hour, minute, 0, 0);
+      if (target.getTime() <= Date.now()) target.setDate(target.getDate() + 1);
+      return sleepSteps.map(step => ({...step, targetTime: target.getTime() - step.offset * 60000}));
+    }
+    function openSleepPlan() {
+      document.getElementById('sleep-status').textContent = '';
+      renderSleepPlan();
+      document.getElementById('sleep-dialog').showModal();
+    }
+    function renderSleepPlan() {
+      const container = document.getElementById('sleep-plan');
+      container.replaceChildren();
+      getSleepPlan().forEach((step, index) => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:10px;';
+        const check = document.createElement('input');
+        check.type = 'checkbox'; check.checked = sleepSelection[index];
+        check.onchange = () => { sleepSelection[index] = check.checked; };
+        const title = document.createElement('span'); title.textContent = step.title;
+        const time = document.createElement('span');
+        time.style.cssText = 'margin-left:auto;color:var(--text-dim);white-space:nowrap;';
+        time.textContent = new Date(step.targetTime).toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit', hour12:false});
+        label.append(check, title, time); container.append(label);
+      });
+    }
+    function addSleepPlan() {
+      const plan = getSleepPlan().filter((step, index) => sleepSelection[index]);
+      const status = document.getElementById('sleep-status');
+      if (!plan.length) { status.textContent = '请选择事项并设置目标睡眠时间。'; return; }
+      if (plan.some(step => step.targetTime <= Date.now())) {
+        status.textContent = '部分准备时间已过，请取消勾选这些事项，或将目标睡眠时间调晚。'; return;
+      }
+      plan.forEach(step => {
+        if (tasks.some(t => t.category === 'sleep' && t.title === step.title && t.targetTime === step.targetTime)) return;
+        tasks.push({id: 'task_' + crypto.randomUUID(), title: step.title, category: 'sleep', targetTime: step.targetTime, minutes: (step.targetTime - Date.now()) / 60000, isRepeat: false, snoozeCount: 0, snoozeMinutes: 0});
+      });
+      saveTasks(); renderTasks();
+      document.getElementById('sleep-dialog').close();
+      if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
     }
 
     function addHousework() {
@@ -972,7 +1045,7 @@
           <div class="task-card">
             <div class="task-top-row">
               <div class="task-info">
-                <span class="task-title">${isHousework ? '<span class="housework-badge">家务</span>' : ''}${t.title}</span>
+                <span class="task-title">${isHousework ? '<span class="housework-badge">家务</span>' : ''}${(t.category === 'sleep' || sleepSteps.some(step => step.title === t.title)) ? '<span class="housework-badge" style="color:#c4b5fd;background:rgba(167,139,250,.15);">早睡</span>' : ''}${t.title}</span>
                 <div class="task-meta">
                   <span>提醒：${new Date(t.targetTime).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
                   ${t.isRepeat ? `<span>每 ${t.minutes < 1 ? `${Math.round(t.minutes * 60)} 秒` : `${t.minutes} 分钟`}提醒一次</span>` : ''}
